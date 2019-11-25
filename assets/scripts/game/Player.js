@@ -11,7 +11,7 @@ class Player {
     constructor(index, array) {
         this.isLandlord = false;    // 初始化玩家身份
         this.pIndex = index;    // 初始化玩家编号
-        this.isAi = ture;    // 是否是AI玩家
+        this.isAi = true;    // 是否是AI玩家
         this.cardList = array;    // 初始化牌组
         this.nextPlayer = null;    // 下一家
         this.score = 0;    // 初始化分数
