@@ -131,9 +131,9 @@ cc.Class({
         for (var i = 0; i < 17; i++) {
             // 设置玩家牌张显示
             this.playerCard[i] = cc.instantiate(this.cardPrefabs)
-            this.playerCard[i].setPosition(cc.v2(50 + i * 20, 50))
+            this.playerCard[i].setPosition(cc.v2(110 + i * 20, 60))
             this.playerCard[i].setScale(0.6)
-            this.playerCard[i].getComponent("PlayerCardShow").setCanvas(this.canvas)
+            //this.playerCard[i].getComponent("PlayerCardShow").setCanvas(this.canvas)
             cc.log("this.cardManager.array_player->" + this.cardManager.array_player[1][i].name)
             this.playerCard[i].getComponent("PlayerCardShow").setCardShow(this.cardManager.array_player[1][i].name)    // 设置显示的图片
             this.playerCard[i].getComponent("PlayerCardShow").setIndex(i)    // 设置索引
@@ -154,9 +154,56 @@ cc.Class({
         }
         //this.showCardforower()
         //开始抢地主
-        //this.snatchIndex = -1
-        //this.snatchRound = 1
-        //this.snatchScore = 0
+        this.snatchIndex = -1    // 是否有人叫分
+        this.snatchRound = 1    // 抢地主次数
+        this.snatchScore = 0    // 抢地主分数
         //this.snatchLandlord()
+    },
+
+    /**
+     * 每轮结算，如果叫地主次数大于3次或者有人叫三分，则停止轮转
+     */
+    sumLandlord() {
+        this.snatchRound++
+        if (this.snatchRound > 3) {
+            if (this.snatchIndex != -1) {
+                this.endSnatch()
+            }
+            else {
+                cc.log("重新洗牌")
+                this.restartGame()
+            }
+        } else {
+            if (this.snatchScore == 3) {
+                this.endSnatch()
+            }
+            else {
+                //this.curPlayerAI = this.curPlayerAI.nextAIPlayer
+                //this.snatchLandlord()
+            }
+        }
+    },
+
+    /**
+     * 设置抢地主状态，并将状态打印到tip上
+     * @param {*} ret 
+     */
+    setSnatchState(ret) {
+        var retstr
+        if (ret < 4 && ret > this.snatchScore) {
+            retstr = "抢地主 " + ret + "分"
+            this.snatchIndex = this.curPlayerAI.player.pIndex
+            this.snatchScore = ret
+        }
+        else {
+            retstr = "不抢"
+        }
+        this["tip" + this.snatchRound].string = retstr
+        this.sumLandlord()
+    },
+
+    endSnatch() {
+        console.log("endSnatch");
+
     }
 });
