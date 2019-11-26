@@ -775,15 +775,226 @@ class AILogic {
      * @param {number} n 张数
      * @param {number} v 需要大过的值
      */
-    getMinVal(n, v){
+    getMinVal(n, v) {
         var self = this,
             c = cardRule.valCount(self.cards);
         for (var i = c.length - 1; i >= 0; i--) {
-            if(c[i].count === n  && c[i].val > v){
+            if (c[i].count === n && c[i].val > v) {
                 return self.cards.splice(i, 1);
             }
         }
     }
+
+    /**
+     * 牌型分析
+     */
+    analyse() {
+        var self = this,
+            target = self.cards.slice(0),//拷贝一份牌来分析
+            stat = null,//统计信息
+            targetWob = null,//除去炸弹之后的牌组
+            targetWobt = null,//除去炸弹、三根之后的牌组
+            targetWobp = null,//除去炸弹、顺子之后的牌组
+            targetWobpp = null;//除去炸弹、连对之后的牌组
+        //定义牌型
+        //单张
+        self._one = [];
+        //对子
+        self._pairs = [];
+        //三张
+        self._three = [];
+        //炸弹
+        self._bomb = [];
+        //飞机
+        self._plane = [];
+        //顺子
+        self._progression = [];
+        //连对
+        self._progressionPairs = [];
+        //王炸
+        self._kingBomb = [];
+        target.sort(GlobalHandle.cardSort);
+        //判定王炸
+        if (cardRule.isKingBomb(target.slice(0, 2))) {
+            self._kingBomb.push(new AICardType(17, target.splice(0, 2)));
+        }
+        //判定炸弹
+        stat = cardRule.valCount(target);
+        for (var i = 0; i < stat.length; i++) {
+            if (stat[i].count === 4) {
+                var list = [];
+                self.moveItem(target, list, stat[i].val);
+                self._bomb.push(new AICardType(list[0].val, list));
+            }
+        }
+        targetWob = target.slice(0);
+        //判定三根，用于判定三顺
+        targetWobt = targetWob.slice(0);
+        self.judgeThree(targetWobt);
+        //判定三顺(飞机不带牌)
+        self.judgePlane();
+
+        //把三根加回用于判定顺子
+        for (i = 0; i < self._three.length; i++) {
+            targetWobt = targetWobt.concat(self._three[i].cardList);
+        }
+        self._three = [];
+        targetWobt.sort(GlobalHandle.cardSort);
+        //判定顺子，先确定五连
+        targetWobp = targetWobt.slice(0);
+        self.judgeProgression(targetWobp);
+        //判断连对
+        //targetWobpp = targetWobp.slice(0);
+        self.judgeProgressionPairs(targetWobp);
+        //判定三根，用于判定三顺
+        //targetWobt = targetWob.slice(0);
+        self.judgeThree(targetWobp);
+        //除去顺子、炸弹、三根后判断对子、单牌
+        stat = cardRule.valCount(targetWobp);
+        for (i = 0; i < stat.length; i++) {
+            if (stat[i].count === 1) {//单牌
+                for (var j = 0; j < targetWobp.length; j++) {
+                    if (targetWobp[j].val === stat[i].val) {
+                        self._one.push(new AICardType(stat[i].val, targetWobp.splice(j, 1)));
+                    }
+                }
+            } else if (stat[i].count === 2) {//对子
+                for (var j = 0; j < targetWobp.length; j++) {
+                    if (targetWobp[j].val === stat[i].val) {
+                        self._pairs.push(new AICardType(stat[i].val, targetWobp.splice(j, 2)));
+                    }
+                }
+            }
+        }
+
+    }
+
+    /**
+     * 判断给定牌中的三张
+     * @param {*} cards 
+     */
+    judgeThree(cards) {
+        var stat = cardRule.valCount(cards);
+        for (var i = 0; i < stat.length; i++) {
+            if (stat[i].count === 3) {
+                var list = [];
+                this.moveItem(cards, list, stat[i].val);
+                this._three.push(new AICardType(list[0].val, list));
+            }
+        }
+    }
+
+    /**
+     * 判断给定牌中的飞机
+     */
+    judgePlane = function () {
+        var self = this;
+        if (self._three.length > 1) {
+            var proList = [];
+            for (var i = 0; i < self._three.length; i++) {//遍历统计结果
+                if (self._three[i].val >= 15) continue;//三顺必须小于2
+                if (proList.length == 0) {
+                    proList.push({ 'obj': self._three[i], 'fromIndex': i });
+                    continue;
+                }
+                if (proList[proList.length - 1].val - 1 == self._three[i].val) {//判定递减
+                    proList.push({ 'obj': self._three[i], 'fromIndex': i });
+                } else {
+                    if (proList.length > 1) {//已经有三顺，先保存
+                        var planeCards = [];
+                        for (var j = 0; j < proList.length; j++) {
+                            planeCards = planeCards.concat(proList[j].obj.cardList);
+                        }
+                        self._plane.push(new AICardType(proList[0].obj.val, planeCards));
+                        for (var k = proList.length - 1; k >= 0; k--) {//除去已经被取走的牌
+                            self._three.splice(proList[k].fromIndex, 1);
+                        }
+                    }
+                    //重新计算
+                    proList = [];
+                    proList.push({ 'obj': self._three[i], 'fromIndex': i });
+                }
+            }
+            if (proList.length > 1) {//有三顺，保存
+                var planeCards = [];
+                for (var j = 0; j < proList.length; j++) {
+                    planeCards = planeCards.concat(proList[j].obj.cardList);
+                }
+                self._plane.push(new AICardType(proList[0].obj.val, planeCards));
+                for (var k = proList.length - 1; k >= 0; k--) {//除去已经被取走的牌
+                    self._three.splice(proList[k].fromIndex, 1);
+                }
+            }
+        }
+    }
+
+    /**
+     * 判断给定牌中的顺子
+     * @param {*} cards 
+     */
+    judgeProgression(cards) {
+        var self = this;
+
+        var saveProgression = function (proList) {
+            var progression = [];
+            for (var j = 0; j < proList.length; j++) {
+                progression.push(proList[j].obj);
+            }
+            self._progression.push(new AICardType(proList[0].obj.val, progression));
+            for (var k = proList.length - 1; k >= 0; k--) {//除去已经被取走的牌
+                cards.splice(proList[k].fromIndex, 1);
+            }
+        };
+        //判定顺子
+        if (cards.length >= 5) {
+            var proList = [];
+            for (var i = 0; i < cards.length; i++) {
+                if (cards[i].val >= 15) continue;//顺子必须小于2
+                if (proList.length == 0) {
+                    proList.push({ 'obj': cards[i], 'fromIndex': i });
+                    continue;
+                }
+                if (proList[proList.length - 1].obj.val - 1 === cards[i].val) {//判定递减
+                    proList.push({ 'obj': cards[i], 'fromIndex': i });
+                    if (proList.length === 5) break;
+                } else if (proList[proList.length - 1].obj.val === cards[i].val) {//相等跳出本轮
+                    continue;
+                } else {
+                    if (proList.length >= 5) {//已经有顺子，先保存
+                        break;
+                    } else {
+                        //重新计算
+                        proList = [];
+                        proList.push({ 'obj': cards[i], 'fromIndex': i });
+                    }
+                }
+            }
+            if (proList.length === 5) {//有顺子，保存
+                saveProgression(proList);
+                self.judgeProgression(cards);//再次判断顺子
+            } else {
+                self.joinProgression(cards);
+            }
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     /**
      * 手牌评分，用于叫分阶段
