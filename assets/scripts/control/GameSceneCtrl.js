@@ -4,6 +4,7 @@
 
 var CardManager = require("CardManager");
 var Player = require("Player");
+var AILogic = require("AILogic");
 
 cc.Class({
     extends: cc.Component,
@@ -91,6 +92,9 @@ cc.Class({
 
     // update (dt) {},
 
+    /**
+     * 重新开始游戏
+     */
     restartGame() {
         console.log("restartGame");
 
@@ -115,16 +119,16 @@ cc.Class({
         this.player2.isAI = false
         this.player3.isAI = true
         //创建AI逻辑
-        /* this.AILogic1 = new AILogic(this.player1)
+        this.AILogic1 = new AILogic(this.player1)
         this.AILogic2 = new AILogic(this.player2)
         this.AILogic3 = new AILogic(this.player3)
 
         this.AILogic1.nextAIPlayer = this.AILogic2
         this.AILogic2.nextAIPlayer = this.AILogic3
-        this.AILogic3.nextAIPlayer = this.AILogic1 */
+        this.AILogic3.nextAIPlayer = this.AILogic1
 
         //显示牌
-        //this.curPlayerAI = this.AILogic1
+        this.curPlayerAI = this.AILogic1
         this.playerCardLayer.removeAllChildren()
         this.player1CardLayer.removeAllChildren()
         this.player3CardLayer.removeAllChildren()
@@ -152,12 +156,25 @@ cc.Class({
             this.player3Card[i].setScale(0.3)
             this.player3CardLayer.addChild(this.player3Card[i])
         }
-        //this.showCardforower()
+        //this.showCardforower()    // 展示底牌
         //开始抢地主
         this.snatchIndex = -1    // 是否有人叫分
         this.snatchRound = 1    // 抢地主次数
         this.snatchScore = 0    // 抢地主分数
-        //this.snatchLandlord()
+        this.snatchLandlord()
+    },
+
+    /**
+     * 抢地主
+     */
+    snatchLandlord() {
+        if (this.curPlayerAI.player.isAI) {
+            var ret = this.curPlayerAI.judgeScore();
+            this.setSnatchState(ret)
+        }
+        else {
+            this.qiangNode.setPosition(cc.v2(0, -100))
+        }
     },
 
     /**
@@ -167,25 +184,28 @@ cc.Class({
         this.snatchRound++
         if (this.snatchRound > 3) {
             if (this.snatchIndex != -1) {
-                this.endSnatch()
+                this.removeSnatchState();
+                this.endSnatch();
             }
             else {
                 cc.log("重新洗牌")
+                this.removeSnatchState();
                 this.restartGame()
             }
         } else {
             if (this.snatchScore == 3) {
+                this.removeSnatchState();
                 this.endSnatch()
             }
             else {
-                //this.curPlayerAI = this.curPlayerAI.nextAIPlayer
-                //this.snatchLandlord()
+                this.curPlayerAI = this.curPlayerAI.nextAIPlayer
+                this.snatchLandlord()
             }
         }
     },
 
     /**
-     * 设置抢地主状态，并将状态打印到tip上
+     * 设置抢地主状态
      * @param {*} ret 
      */
     setSnatchState(ret) {
@@ -202,8 +222,179 @@ cc.Class({
         this.sumLandlord()
     },
 
-    endSnatch() {
-        console.log("endSnatch");
+    /**
+     * 移除抢地主状态
+     */
+    removeSnatchState() {
+        this.tip1.string = "";
+        this.tip2.string = "";
+        this.tip3.string = "";
+    },
 
-    }
+    /**
+     * 结束叫地主
+     */
+    endSnatch() {
+        for (var i = 1; i <= 3; i++) {
+            this["tip" + i].string = "开始"
+        }
+        var self = this
+        cc.loader.loadRes("pic/dizhnu8", cc.SpriteFrame, function (err, spriteFrame) {
+            self["playerIconSp" + self.snatchIndex].getComponent(cc.Sprite).spriteFrame = spriteFrame;
+        });
+        this.promptCardLayer.removeAllChildren()
+        //地主
+        this.landlordAi = this.AILogic1
+        switch (this.snatchIndex) {
+            case 1:
+                this.player1.cardList[17] = this.cardManager.array_cardforower[0]
+                this.player1.cardList[18] = this.cardManager.array_cardforower[1]
+                this.player1.cardList[19] = this.cardManager.array_cardforower[2]
+                for (var i = 17; i < 20; i++) {
+                    this.player1Card[i] = cc.instantiate(this.cardBackPrefabs)
+                    this.player1Card[i].setPosition(cc.v2(20, -20 + 5 * i))
+                    this.player1Card[i].setScale(0.3)
+                    this.player1CardLayer.addChild(this.player1Card[i])
+                }
+                break;
+            case 2:
+                this.landlordAi = this.AILogic2
+                this.player2.cardList[17] = this.cardManager.array_cardforower[0]
+                this.player2.cardList[18] = this.cardManager.array_cardforower[1]
+                this.player2.cardList[19] = this.cardManager.array_cardforower[2]
+                for (var i = 17; i < 20; i++) {
+                    this.playerCard[i] = cc.instantiate(this.cardPrefabs)
+                    this.playerCard[i].setPosition(cc.v2(70 + i * 20, 60))
+                    this.playerCard[i].setScale(0.6)
+                    this.playerCard[i].getComponent("PlayerCardShow").setCanvas(this.canvas)
+                    this.playerCard[i].getComponent("PlayerCardShow").setCardShow(this.player2.cardList[i].name)
+                    this.playerCard[i].getComponent("PlayerCardShow").setIndex(i)
+                    this.playerCard[i].getComponent("PlayerCardShow").setIsCanChick()
+                    this.playerCardLayer.addChild(this.playerCard[i])
+                }
+                break;
+            case 3:
+                this.landlordAi = this.AILogic3
+                this.player3.cardList[17] = this.cardManager.array_cardforower[0]
+                this.player3.cardList[18] = this.cardManager.array_cardforower[1]
+                this.player3.cardList[19] = this.cardManager.array_cardforower[2]
+                for (var i = 17; i < 20; i++) {
+                    this.player3Card[i] = cc.instantiate(this.cardBackPrefabs)
+                    this.player3Card[i].setPosition(cc.v2(-20, -20 + 5 * i))
+                    this.player3Card[i].setScale(0.3)
+                    this.player3CardLayer.addChild(this.player3Card[i])
+                }
+                break;
+        }
+        //上一次出牌的牌型
+        this.lastCardType = -1
+        //上一次最小牌
+        this.lastMin = -1
+        //上一次牌的数量
+        this.lastNum = 0
+        //开始出牌起始
+        this.curPlayerAI = this.landlordAi
+        this.curPlayerAI.player.isLandlord = true
+        this.curPlayerAI.player.cardNum = 20
+        //农民数量
+        this.framerNum = 2
+        this.cardRound()
+    },
+
+    /**
+     * 不抢地主
+     */
+    nolandord() {
+        this.qiangNode.setPosition(cc.v2(0, -300))
+        this.setSnatchState(4)
+    },
+
+    /**
+     * 抢地主：1分
+     */
+    landord1() {
+        this.qiangNode.setPosition(cc.v2(0, -300))
+        this.setSnatchState(1)
+    },
+
+    /**
+     * 抢地主：2分
+     */
+    landord2() {
+        this.qiangNode.setPosition(cc.v2(0, -300))
+        this.setSnatchState(2)
+    },
+
+    /**
+     * 抢地主：3分
+     */
+    landord3() {
+        this.qiangNode.setPosition(cc.v2(0, -300))
+        this.setSnatchState(3)
+    },
+
+    /**
+     * 展示底牌
+     */
+    showCardforower() {
+        this.promptCardLayer.removeAllChildren()
+
+        var cardNode = cc.instantiate(this.cardPrefabs)
+        cardNode.setPosition(cc.v2(-50, 0))
+        cardNode.setScale(0.5)
+        cardNode.getComponent("PlayerCardShow").setCardShow(this.cardManager.array_cardforower[0].name)
+        this.promptCardLayer.addChild(cardNode)
+
+        cardNode = cc.instantiate(this.cardPrefabs)
+        cardNode.setPosition(cc.v2(0, 0))
+        cardNode.setScale(0.5)
+        cardNode.getComponent("PlayerCardShow").setCardShow(this.cardManager.array_cardforower[1].name)
+        this.promptCardLayer.addChild(cardNode)
+
+        cardNode = cc.instantiate(this.cardPrefabs)
+        cardNode.setPosition(cc.v2(50, 0))
+        cardNode.setScale(0.5)
+        cardNode.getComponent("PlayerCardShow").setCardShow(this.cardManager.array_cardforower[2].name)
+        this.promptCardLayer.addChild(cardNode)
+    },
+
+    endGame() {
+
+    },
+
+    //结束一个出牌轮次
+    sumRound() {
+        this.curPlayerAI.player.cardNum = this.curPlayerAI.player.cardNum - this.lastNum
+        if (this.curPlayerAI.player.cardNum == 0) {
+            this.curPlayerAI.player.isEnd = true
+            //地主胜利
+            if (this.curPlayerAI.player.isLandlord) {
+                this.endGame()
+            }
+            //农民胜利
+            else {
+                this.framerNum--
+                if (this.framerNum == 0)
+                    this.cardRound()
+            }
+        }
+    },
+
+    cardRound() {
+        if (this.curPlayerAI.player.isEnd) {
+            this.curPlayerAI = this.curPlayerAI.nextAIPlayer
+            this.cardRound()
+        }
+        else if (this.curPlayerAI.player.isAI) {
+            //具体出牌逻辑
+            //这里暂时省略...
+        }
+        else {
+            this.playNode.setPosition(cc.v2(0, -100))
+        }
+    },
+
+    nocard() {
+        this.playNode.setPosition(cc.v2(0, -300))
+    },
 });

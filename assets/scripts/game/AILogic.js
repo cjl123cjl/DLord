@@ -7,7 +7,7 @@ class AICardType {
         this.val = v;
         this.cardList = list;
     }
-}
+};
 
 class AILogic {
     constructor(p) {
@@ -978,29 +978,285 @@ class AILogic {
         }
     }
 
+    /**
+     * 判断给定牌中的连对
+     * @param {*} cards 
+     */
+    judgeProgressionPairs(cards) {
+        var self = this;
 
+        var saveProgressionPairs = function (proList) {
+            var progressionPairs = [];
+            for (var i = proList.length - 1; i >= 0; i--) {//除去已经被取走的牌
+                for (var j = 0; j < cards.length; j++) {
+                    if (cards[j].val === proList[i]) {
+                        progressionPairs = progressionPairs.concat(cards.splice(j, 2));
+                        break;
+                    }
+                }
+            }
+            progressionPairs.sort(GlobalHandle.cardSort);
+            self._progressionPairs.push(new AICardType(proList[0], progressionPairs));
+        };
+        //判定连对
+        if (cards.length >= 6) {
+            var proList = [];
+            var stat = cardRule.valCount(cards);//统计
+            for (var i = 0; i < stat.length; i++) {
+                if (stat[i].val >= 15) {//连对必须小于2
+                    continue;
+                }
+                if (proList.length == 0 && stat[i].count >= 2) {
+                    proList.push(stat[i].val);
+                    continue;
+                }
+                if (proList[proList.length - 1] - 1 === stat[i].val && stat[i].count >= 2) {//判定递减
+                    proList.push(stat[i].val);
+                } else {
+                    if (proList.length >= 3) {//已经有连对，先保存
+                        //saveProgressionPairs(proList);
+                        //proList = [];
+                        break;
+                    } else {
+                        //重新计算
+                        proList = [];
+                        if (stat[i].count >= 2) proList.push(stat[i].val);
+                    }
+                }
+            }
+            if (proList.length >= 3) {//有顺子，保存
+                saveProgressionPairs(proList);
+                self.judgeProgressionPairs(cards);
+            }
+        }
+    }
 
+    /**
+     * 将顺子与剩下的牌进行拼接，组成更大的顺子
+     * @param {*} cards 
+     */
+    joinProgression(cards) {
+        var self = this;
+        for (var i = 0; i < this._progression.length; i++) {//拼接其他散牌
+            for (var j = 0; j < cards.length; j++) {
+                if (this._progression[i].val != 14 && this._progression[i].val === cards[j].val - 1) {
+                    this._progression[i].cardList.unshift(cards.splice(j, 1)[0]);
+                } else if (cards[j].val === this._progression[i].val - this._progression[i].cardList.length) {
+                    this._progression[i].cardList.push(cards.splice(j, 1)[0]);
+                }
+            }
+        }
+        var temp = this._progression.slice(0);
+        for (i = 0; i < temp.length; i++) {//连接顺子
+            if (i < temp.length - 1 && temp[i].val - temp[i].cardList.length === temp[i + 1].val) {
+                this._progression[i].cardList = this._progression[i].cardList.concat(this._progression[i + 1].cardList);
+                this._progression.splice(++i, 1);
+            }
+        }
+    }
 
+    /**
+     * 将src中对应值的牌数据移动到dest中
+     * @param {*} src 
+     * @param {*} dest 
+     * @param {*} v 
+     */
+    moveItem(src, dest, v) {
+        for (var i = src.length - 1; i >= 0; i--) {
+            if (src[i].val === v) {
+                dest.push(src.splice(i, 1)[0]);
+            }
+        }
+    }
 
+    /**
+     * 设置返回牌的类型
+     * @param {*} obj 
+     * @param {*} kind 
+     */
+    setCardKind(obj, kind) {
+        obj.cardKind = kind;
+        obj.size = obj.cardList.length;
+        return obj;
+    }
 
+    /**
+     * 获取大过当前最大牌的三顺最小值
+     * @param {*} len 
+     * @param {*} winc 
+     */
+    minPlane(len, winc) {
+        var self = this;
+        if (self._plane.length > 0) {
+            for (var i = self._plane.length - 1; i >= 0; i--) {//从小值开始判断
+                if (winc.val < self._plane[i].val && len <= self._plane[i].cardList.length) {
+                    if (len === self._plane[i].cardList.length) {
+                        return self.setCardKind(self._plane[i], cardRule.PLANE);
+                    } else {
+                        var valDiff = self._plane[i].val - winc.val,
+                            sizeDiff = (self._plane[i].cardList.length - len) / 3;
+                        for (var j = 0; j < sizeDiff; j++) {//拆顺
+                            if (valDiff > 1) {
+                                for (var k = 0; k < 3; k++) {
+                                    self._plane[i].cardList.shift();
+                                }
+                                valDiff--;
+                                continue;
+                            }
+                            for (var k = 0; k < 3; k++) {
+                                self._plane[i].cardList.pop();
+                            }
+                        }
+                        return self.setCardKind(self._plane[i], cardRule.PLANE);
+                    }
+                }
+            }
+        }
+        return null;
+    }
 
+    /**
+     * 获取list中大过v的最小的元素
+     * @param {*} list 
+     * @param {*} kind 牌型
+     * @param {*} v 要大过的值
+     */
+    minCards(list, kind, v) {
+        var self = this;
+        v = v ? v : 2;
+        if (list.length > 0) {
+            for (var i = list.length - 1; i >= 0; i--) {//从小值开始判断
+                if (v < list[i].val) {
+                    return self.setCardKind(list[i], kind);
+                }
+            }
+        }
+        return null;
+    }
 
+    /**
+     * 获取list中对应牌型最大的元素
+     * @param {*} list 
+     * @param {*} kind 牌型
+     * @param {*} v 要打过的值
+     */
+    maxCards(list, kind, v) {
+        var self = this,
+            max = null;
+        if (list.length > 0) {
+            for (var i = 0; i < list.length; i++) {//从小值开始判断
+                if ((max && list[i].val > max.val) || !max) {
+                    max = list[i];
+                }
+            }
+            return v ? (max.val > v ? self.setCardKind(max, kind) : null) : self.setCardKind(max, kind);
+        }
+        return null;
+    }
 
+    /**
+     * 根据自己是否是庄家，来决定出牌，匹配最大或者最小
+     * @param {[array]} list 出牌列表
+     * @param {*} kind 牌型
+     * @param {object} winc 当前牌面最大的牌
+     * @param {boolean} isWinnerIsLandlord 当前最大是否是地主
+     * @param {number} winnerCardCount 当前最大那家剩余手牌数
+     */
+    matchCards(list, kind, winc, isWinnerIsLandlord, winnerCardCount) {
+        var self = this;
+        if (self.player.isLandlord) {//坐庄打法
+            if (self.player.nextPlayer.cardList.length < 3 || self.player.nextPlayer.nextPlayer.cardList.length < 3)
+                return self.maxCards(list, kind, winc.val);
+            else
+                return self.minCards(list, kind, winc.val);
+        } else {//偏家打法
+            if (isWinnerIsLandlord) {//地主大时
+                if (winnerCardCount < 3) {
+                    return self.maxCards(list, kind, winc.val);
+                } else {
+                    return self.minCards(list, kind, winc.val);
+                }
+            } else {
+                var c = null;
+                if (self.player.nextPlayer.isLandlord && self.player.nextPlayer.cardList.length < 3) {
+                    return self.maxCards(list, kind, winc.val);
+                } else {
+                    c = self.minCards(list, kind, winc.val);
+                    return c ? (c.val < 14 || self.times() <= 2 ? c : null) : null;
+                }
+            }
+        }
+    }
 
+    /**
+     * 从对子或者单排中获取一张牌
+     * @param {*} v 
+     * @param {*} notEq 
+     */
+    minOne(v, notEq) {
+        var self = this,
+            one = self.minCards(self._one, cardRule.ONE, v),
+            oneFromPairs = self.offPairs(notEq);
+        if (!one) {//没有单根，找对
+            if (oneFromPairs) {
+                self.deleteOne(oneFromPairs);
+                return oneFromPairs;
+            } else {
+                return null;
+            }
+        } else {
+            if (one.val > 14) {//保留2和大小王
+                if (oneFromPairs) {
+                    self.deleteOne(oneFromPairs);
+                    return oneFromPairs;
+                } else
+                    return null;
+            } else {
+                return one.cardList[0];
+            }
+        }
+        return null;
+    }
 
+    /**
+     * 拆对
+     * @param {*} v 
+     * @param {*} notEq 
+     */
+    offPairs(v, notEq) {
+        var self = this,
+            pairs = self.minCards(self._pairs, cardRule.PAIRS, v);
+        if (pairs) {
+            while (true) {
+                if (pairs.cardList[0].val === notEq) {
+                    pairs = self.minCards(self._pairs, cardRule.PAIRS, pairs.cardList[0].val);
+                } else {
+                    break;
+                }
+            }
+        }
 
+        return pairs ? pairs.cardList[0] : null;
+    }
 
-
-
-
-
-
+    /**
+     * 删掉一张牌并重新分析
+     * @param {*} card 
+     */
+    deleteOne(card) {
+        for (var i = 0; i < this.cards.length; i++) {
+            if (this.cards[i].val === card.val && this.cards[i].type === card.type) {
+                this.cards.splice(i, 1);
+            }
+        }
+        this.analyse();
+    }
 
     /**
      * 手牌评分，用于叫分阶段
      */
     judgeScore() {
-        var self = this,
+        /* var self = this,
             score = 0;
         score += self._bomb.length * 6;//有炸弹加六分
         if (self._kingBomb.length > 0) {//王炸8分
@@ -1026,8 +1282,56 @@ class AILogic {
             return 1;
         } else {//4相当于不叫
             return 4;
-        }
+        } */
+        return 3;
     }
 
+    /**
+     * 手数，手牌需要打出几次才能打完
+     */
+    times() {
+        var self = this;
+        var t = this._kingBomb.length +
+            this._bomb.length +
+            this._progression.length +
+            this._progressionPairs.length +
+            this._one.length +
+            this._pairs.length;
+        var threeCount = this._three.length;
+        if (this._plane.length > 0) {
+            for (var i = 0; i < this._plane.length; i++) {
+                threeCount += this._plane[i].cardList.length / 3;
+            }
+        }
+        if (threeCount - (this._one.length + this._pairs.length) > 0) {
+            t += threeCount - (this._one.length + this._pairs.length);
+        }
+        return t;
+    }
 
-}
+    /**
+     * 打印手牌概况
+     */
+    log() {
+        var self = this;
+        console.info('以下显示【' + self.player.name + '】手牌概况，手数：' + self.times());
+        console.info('王炸');
+        console.info(self._kingBomb);
+        console.info('炸弹');
+        console.info(self._bomb);
+        console.info('三根');
+        console.info(self._three);
+        console.info('飞机');
+        console.info(self._plane);
+        console.info('顺子');
+        console.info(self._progression);
+        console.info('连对');
+        console.info(self._progressionPairs);
+        console.info('单牌');
+        console.info(self._one);
+        console.info('对子');
+        console.info(self._pairs);
+    }
+};
+
+module.exports = AILogic;
